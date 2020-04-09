@@ -45,6 +45,7 @@ ruleset store {
   rule new_order{
     select when store new_order
     //add the order with all attributes to the list of orders
+    //init the entry in the bids map
     //raise store broadcast
   }
   rule broadcast_order{
@@ -86,4 +87,3 @@ ruleset store {
     }
   }
 }
-
