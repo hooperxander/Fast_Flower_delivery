@@ -13,9 +13,9 @@ This function will return the following object:\
     }
 }
 ```
-With the value of `"qrcode"` being a 64bit encoded .png file, which can be displayed directly without any modifications.
+with the value of `"qrcode"` being a 64bit encoded .png file, which can be displayed directly without any modifications.
 
-To use, you need to make a file happi_keys.krl, which contains the following:
+To use, you need to make your own file called `happi_keys.krl`, which contains the following:
 ```
 ruleset happi_keys {
     meta {
@@ -24,5 +24,5 @@ ruleset happi_keys {
     }
 }
 ```
-Remember, don't push your api keys :P\
-The .gitignore will ignore any files with *key* in it's name.
+The .gitignore will ignore any files with *key* in it's name.\
+Remember, don't push your api keys :P
