@@ -1,6 +1,6 @@
 ruleset store {
   meta {
-    shares __testing, getOrders, getBids, getIP, getPreference, getRatings
+    shares __testing, getOrders, getBids, getIP, getPreference, getRatings, getThreshold
     use module happi
     use module io.picolabs.subscription alias Subscriptions
   }
@@ -12,10 +12,11 @@ ruleset store {
       , { "name": "getIP"}
       , { "name": "getPreference"}
       , { "name": "getRatings"}
+      , { "name": "getThreshold"}
       ] , "events":
       [ { "domain": "store", "type": "reset" }
       , { "domain": "store", "type": "IP", "attrs": [ "IP" ] }
-      , { "domain": "store", "type": "preferences", "attrs": [ "accept_bids" ] }
+      , { "domain": "store", "type": "preferences", "attrs": [ "accept_bids", "rank_threshold" ] }
       , { "domain": "store", "type": "new_order", "attrs": [ "id", "flowers", "address", "deliveryTime", "phone" ] }
       ]
     }
@@ -27,6 +28,9 @@ ruleset store {
     }
     getIP = function(){
       return ent:IP
+    }
+    getThreshold = function(){
+      return ent:rank_threshold
     }
     getPreference = function(){
       return ent:accept_bids
@@ -46,7 +50,8 @@ ruleset store {
     select when store preferences
     //used so store knows what info to put on the QR code
     always{
-      ent:accept_bids := event:attrs{"accept_bids"}
+      ent:accept_bids := event:attrs{"accept_bids"}.as("Number")
+      ent:rank_threshold := event:attrs{"rank_threshold"}.as("Number")
     }
   }
   rule new_order{
@@ -60,15 +65,21 @@ ruleset store {
     }
     always{
       //add the order with all attributes to the list of orders
-      ent:orders{id} := {"flowers" : flowers, "address" : address, "phone" : phone, "start" : time:now(), "deliveryTime" : deliveryTime, "assigned" : false}
+      ent:orders{id} := {"flowers" : flowers, "address" : address, "phone" : phone, "start" : time:now(), "deliveryTime" : deliveryTime, "status" : "new"}
        //init the entry in the bids map
       ent:bids{id} := []
       //raise store broadcast
       raise store event "broadcast"
       attributes {"id": id}
+      if ent:accept_bids
       //schedule an assign delivery event for 30 secs
       schedule store event "assign_delivery" at time:add(time:now(),{"minutes" : 1})
       attributes {"id": id}
+      if ent:accept_bids
+      //assign if not wanting bids
+      raise store event "assign_delivery"
+      attributes {"id": id}
+      if ent:accept_bids == 0
     }
   }
   rule broadcast_order{
@@ -82,13 +93,35 @@ ruleset store {
   }
   rule receive_bid{
     select when store bid
+    pre{
+      id = event:attrs{"id"}
+      driver = event:attrs{"eci"}
+      bid = event:attrs{"bid"}
+    }
     //add the bid to the bids map
+    always{
+      ent:bids{[id, driver]} := bid.defaultsTo(0)
+    }
   }
   rule assign_delivery{
     select when store assign_delivery
+    pre{
+      id = event:attrs{"id"}
+      drivers = ent:bids{event:attrs{"id"}}.keys().length() => ent:bids{event:attrs{"id"}}.keys() | ent:ratings.keys().klog("all drivers")
+      valid_drivers = drivers.filter(function(a) {ent:ratings{a} >= ent:rank_threshold}).klog("valid drivers")
+      driver = valid_drivers.length() => valid_drivers[0] | -1
+      test = driver.klog("assigned driver")
+    }
+    if driver > -1 then 
     //send a driver an event telling them they got the order
-    //update the orderlist to reflect the package status
-    //raise notify customer
+    event:send({"eci":driver, "domain":"driver", "type":"assigned", "attrs":{"id": id}})
+    fired{
+      //update the orderlist to reflect the package status
+      ent:orders{[id, "status"]} := "on its way"
+      //raise notify customer
+      raise store event notify_customer
+      attributes {"id": id}
+    }
   }
   rule notify_customer{
     select when store notify_customer
@@ -97,9 +130,22 @@ ruleset store {
   }
   rule item_delivered{
     select when store delivery_complete
+    pre{
+      id = event:attrs{"id"}
+      driver = event:attrs{"eci"}
+      started = ent:orders{[id, "start"]}
+      delivered = time:add(time:now(),{"minutes" : ent:orders{[id, deliveryTime]}})
+    }
     //event received from driver
-    //update orders list to reflect delivery
-    //update rating of driver
+    always{
+      //update orders list to reflect delivery
+      ent:orders{[id, "status"]} := "delivered"
+       //update rating of driver
+      ent:ratings{driver} := ent:ratings{driver} + 1
+      if time:compare(delivered, started)
+      ent:ratings{driver} := ent:ratings{driver} - 1
+      if time:compare(started, delivered)
+    }
   }
   rule reset{
     select when store reset
@@ -109,12 +155,14 @@ ruleset store {
       clear ent:ratings
       clear ent:IP
       clear ent:accept_bids
+      clear ent:rank_threshold
       ent:orders := []
       //this map keys order ids to bids from drivers
       ent:bids := {}
-      ent:ratings := {}
+      ent:ratings := Subscriptions:established("Tx_role","driver").collect(function(x){ x{"Tx"} }).map(function(v,k){0})
       ent:IP := 0
       ent:accept_bids := 0
+      ent:rank_threshold := -100
     }
   }
 }
