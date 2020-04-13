@@ -1,6 +1,8 @@
 ruleset store {
   meta {
-    shares __testing, getOrders, getBids, getIP, getPreference
+    shares __testing, getOrders, getBids, getIP, getPreference, getRatings, getThreshold
+    use module happi
+    use module twilio
   }
   global {
     __testing = { "queries":
@@ -66,6 +68,21 @@ ruleset store {
   rule notify_customer{
     select when store notify_customer
     //api calls are both in here to text customer a QR code
+    pre{
+        customer_phone = ent:orders{[id, "phone"]}
+        message = "Your flowers are on the way!"
+        IP_address = ent:IP
+        store_eci = meta:eci
+        driver_eci = event:attrs{"driver_eci"} //TODO: driver eci needed!
+        id = event:attrs{"id"}
+        url_to_encode = IP_address + "/sky/event/" + store_eci + "/d/store/delivery_complete?id=" + id + "&eci=" + driver_eci
+        res = happi:get_QRcode(url_to_encode).klog("happi response: ")
+        qrcode = res{"qrcode"}.klog("qrcode: ")
+    }
+    every{
+      twilio:send_sms(message, customer_phone)
+      send_directive("https://gundulin.github.io/CS_462/Fast_Flower_Delivery/?qrcode" + qrcode)
+    }
   }
   rule item_delivered{
     select when store delivery_complete
