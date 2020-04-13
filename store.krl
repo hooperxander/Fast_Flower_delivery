@@ -121,28 +121,31 @@ ruleset store {
       //update the orderlist to reflect the package status
       ent:orders{[id, "status"]} := "on its way"
       //raise notify customer
-      raise store event notify_customer
-      attributes {"id": id}
+      raise store event "notify_customer"
+      attributes {"id": id, "driver_eci": driver}
     }
   }
   rule notify_customer{
     select when store notify_customer
-    //happi:get_QRcode("hi")
     //api calls are both in here to text customer a QR code
     pre{
-        customer_phone = ent:orders{[id, "phone"]}
-        message = "Your flowers are on the way!"
+        id = event:attrs{"id"}
+        customer_phone = ent:orders{[id, "phone"]}.klog("customer_phone: ")
+        print_phone = customer_phone.klog("phone: ") // TODO: delete this after testing
+        message = "Your "+ ent:orders{[id, "flowers"]} + " are on the way!"
         IP_address = ent:IP
         store_eci = meta:eci
-        driver_eci = event:attrs{"driver_eci"} //TODO: driver eci needed!
-        id = event:attrs{"id"}
+        driver_eci = event:attrs{"driver_eci"}
         url_to_encode = IP_address + "/sky/event/" + store_eci + "/d/store/delivery_complete?id=" + id + "&eci=" + driver_eci
-        res = happi:get_QRcode(url_to_encode).klog("happi response: ")
-        qrcode = res{"qrcode"}.klog("qrcode: ")
+        res = happi:get_QRcode(url_to_encode)
+        qrcode = res{"qrcode"}
+        view_qrcode = "https://gundulin.github.io/CS_462/Fast_Flower_Delivery/?qrcode=" + qrcode
+        print = url_to_encode.klog("event url: ")
+        print2 = view_qrcode.klog("qrcode url: ")
     }
     every{
       twilio:send_sms(message, customer_phone)
-      send_directive("https://gundulin.github.io/CS_462/Fast_Flower_Delivery/?qrcode" + qrcode)
+      send_directive(view_qrcode)
     }
   }
   rule item_delivered{
@@ -157,11 +160,14 @@ ruleset store {
     always{
       //update orders list to reflect delivery
       ent:orders{[id, "status"]} := "delivered"
-       //update rating of driver
+      //update rating of driver
+      //time:compare has not been implemented in the new pico engine
+      //so for now, all drivers get +1 just for making the dilivery.
       ent:ratings{driver} := ent:ratings{driver} + 1
-      if time:compare(delivered, started)
-      ent:ratings{driver} := ent:ratings{driver} - 1
-      if time:compare(started, delivered)
+      // ent:ratings{driver} := ent:ratings{driver} + 1
+      // if time:compare(delivered, started)
+      // ent:ratings{driver} := ent:ratings{driver} - 1
+      // if time:compare(started, delivered)
     }
   }
   rule reset{
