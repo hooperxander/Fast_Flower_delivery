@@ -130,7 +130,7 @@ ruleset store {
     //api calls are both in here to text customer a QR code
     pre{
         id = event:attrs{"id"}
-        customer_phone = ent:orders{[id, "phone"]}.klog("customer_phone: ")
+        customer_phone = ent:orders{[id, "phone"]}
         message = "Your "+ ent:orders{[id, "flowers"]} + " are on the way!"
         IP_address = ent:IP
         store_eci = meta:eci
