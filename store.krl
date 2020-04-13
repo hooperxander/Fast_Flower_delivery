@@ -131,7 +131,6 @@ ruleset store {
     pre{
         id = event:attrs{"id"}
         customer_phone = ent:orders{[id, "phone"]}.klog("customer_phone: ")
-        print_phone = customer_phone.klog("phone: ") // TODO: delete this after testing
         message = "Your "+ ent:orders{[id, "flowers"]} + " are on the way!"
         IP_address = ent:IP
         store_eci = meta:eci
