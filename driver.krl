@@ -21,7 +21,7 @@ ruleset driver {
 
   rule new_order{
     //event received from store
-    select when driver new_order where not (ent:orders >< event:attrs{"id"})
+    select when driver new_order where not (ent:orders.defaultsTo([]) >< event:attrs{"id"})
     foreach Subscriptions:established("Tx_role", "driver") setting (sub)
     pre {
       id = event:attr("id").klog("id: ")
