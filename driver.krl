@@ -1,5 +1,6 @@
 ruleset driver {
   meta {
+    use module io.picolabs.subscription alias Subscriptions
     shares __testing
   }
   global {
@@ -19,12 +20,20 @@ ruleset driver {
   }
 
   rule new_order{
-    select when driver new_order
     //event received from store
-    //TODO: gossip the order to ALL other drivers.  Each driver will ignore deliveries it already knows about.
-    //respond with a bid to the store
+    select when driver new_order where not ent:orders.defaultsTo([]) >< event:attr("id")
+    foreach Subscriptions:established("Tx_role", "driver") setting (sub)
+    pre {
+      id = event:attr("id").klog(id)
+      store_eci = event:attr("store_eci")
+    }
+    every {
+      event:send({"eci": sub{"Tx"}, "domain": "driver", "type":"new_order", "attrs": event:attrs})
+      send_directive("new order")
+    }
     fired {
-      raise driver event "make_bid" attributes event:attrs
+      ent:orders := ent:orders.defaultsTo([]).append(id) on final
+      raise driver event "make_bid" attributes event:attrs on final
     }
   }
 
