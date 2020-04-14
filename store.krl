@@ -91,7 +91,7 @@ ruleset store {
     pre{
       id = event:attrs{"id"}
     }
-    event:send({"eci":eci{"Tx"}, "domain":"driver", "type":"new_order", "attrs":{"id": id}})
+    event:send({"eci":eci{"Tx"}, "domain":"driver", "type":"new_order", "attrs":{"id": id, "store_eci": meta:eci}})
   }
   rule receive_bid{
     select when store bid

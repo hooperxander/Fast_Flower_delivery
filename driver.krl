@@ -7,23 +7,33 @@ ruleset driver {
       [ { "name": "__testing" }
       //, { "name": "entry", "args": [ "key" ] }
       ] , "events":
-      [ //{ "domain": "d1", "type": "t1" }
-      //, { "domain": "d2", "type": "t2", "attrs": [ "a1", "a2" ] }
+      [ { "domain": "driver", "type": "set_bid", "attrs": [ "bid" ] }
       ]
+    }
+  }
+  rule update_bid{
+    select when driver set_bid
+    fired{
+      ent:bid := event:attrs{"bid"}.defaultsTo(0)
     }
   }
   rule new_order{
     select when driver new_order
     //event received from store
-    //gossip the order to other drivers who dont have this order yet
+    //TODO: gossip the order to other drivers who dont have this order yet
     //respond with a bid to the store
+    fired {
+      raise driver event "make_bid" attributes event:attrs
+    }
   }
-  rule make_delivery{
-    select when driver assigned
-    //event sent from store telling driver they got the delivery
-    //make delivery by waiting some amount of time then scanning the QR code on customers phone
+  rule bid{
+    select when driver make_bid
+    pre{
+      store_eci = event:attrs{"store_eci"}
+      order_id = event:attrs{"id"}
+      driver_eci = meta:eci
+      bid = ent:bid
+    }
+    event:send({"eci": store_eci, "domain": "store", "type": "bid", "attrs": {"id": order_id, "eci": driver_eci, "bid": bid}})
   }
-  
-  //then there are all the rules for the gossip protocol to ensure all drivers know about every order so they can bid
 }
-
