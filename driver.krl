@@ -10,7 +10,7 @@ ruleset driver {
       ]
     }
   }
-  
+
   rule update_bid{
     select when driver set_bid
     fired{
@@ -34,7 +34,7 @@ ruleset driver {
       store_eci = event:attrs{"store_eci"}
       order_id = event:attrs{"id"}
       driver_eci = meta:eci
-      bid = ent:bid
+      bid = ent:bid.defaultsTo(0)
     }
     event:send({"eci": store_eci, "domain": "store", "type": "bid", "attrs": {"id": order_id, "eci": driver_eci, "bid": bid}})
   }
