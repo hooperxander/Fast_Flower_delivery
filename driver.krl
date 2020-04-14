@@ -1,29 +1,50 @@
 ruleset driver {
   meta {
+    use module io.picolabs.subscription alias Subscriptions
     shares __testing
   }
   global {
     __testing = { "queries":
       [ { "name": "__testing" }
-      //, { "name": "entry", "args": [ "key" ] }
       ] , "events":
-      [ //{ "domain": "d1", "type": "t1" }
-      //, { "domain": "d2", "type": "t2", "attrs": [ "a1", "a2" ] }
+      [ { "domain": "driver", "type": "set_bid", "attrs": [ "bid" ] }
       ]
     }
   }
-  rule new_order{
-    select when driver new_order
-    //event received from store
-    //gossip the order to other drivers who dont have this order yet
-    //respond with a bid to the store
-  }
-  rule make_delivery{
-    select when driver assigned
-    //event sent from store telling driver they got the delivery
-    //make delivery by waiting some amount of time then scanning the QR code on customers phone
-  }
-  
-  //then there are all the rules for the gossip protocol to ensure all drivers know about every order so they can bid
-}
 
+  rule update_bid{
+    select when driver set_bid
+    fired{
+      ent:bid := event:attrs{"bid"}.defaultsTo(0)
+    }
+  }
+
+  rule new_order{
+    //event received from store
+    select when driver new_order where not ent:orders.defaultsTo([]) >< event:attr("id")
+    foreach Subscriptions:established("Tx_role", "driver") setting (sub)
+    pre {
+      id = event:attr("id").klog(id)
+      store_eci = event:attr("store_eci")
+    }
+    every {
+      event:send({"eci": sub{"Tx"}, "domain": "driver", "type":"new_order", "attrs": event:attrs})
+      send_directive("new order")
+    }
+    fired {
+      ent:orders := ent:orders.defaultsTo([]).append(id) on final
+      raise driver event "make_bid" attributes event:attrs on final
+    }
+  }
+
+  rule bid{
+    select when driver make_bid
+    pre{
+      store_eci = event:attrs{"store_eci"}
+      order_id = event:attrs{"id"}
+      driver_eci = meta:eci
+      bid = ent:bid.defaultsTo(0)
+    }
+    event:send({"eci": store_eci, "domain": "store", "type": "bid", "attrs": {"id": order_id, "eci": driver_eci, "bid": bid}})
+  }
+}
